@@ -4,32 +4,7 @@ import chess
 import chess.engine
 from torch.distributions import Categorical
 from data.chess_dataset import PIECE_ORDER
-
-def tensor_to_fen(board_tensor):
-    """
-    board_tensor: length-64 vector, idx 0=a1 … idx63=h8.
-    """
-    squares = [PIECE_ORDER[int(p)] for p in board_tensor]
-
-    # build ranks bottom-to-top
-    ranks = []
-    for r in range(7, -1, -1):           # 7→0
-        row = squares[r*8:(r+1)*8]
-        fen_row = ""
-        empty = 0
-        for c in row:
-            if c == ".":
-                empty += 1
-            else:
-                if empty:
-                    fen_row += str(empty)
-                    empty = 0
-                fen_row += c
-        if empty:
-            fen_row += str(empty)
-        ranks.append(fen_row)
-
-    return "/".join(ranks) + " w - - 0 1"
+from utils.chess_utils import tensor_to_fen
 
 def compute_king_loss(probs, w):
     """Calculates the king penalty loss."""
@@ -42,7 +17,6 @@ def compute_king_loss(probs, w):
 
     return king_penalty
 
-
 def compute_piece_loss(probs, w):
     """Calculates the piece count penalty loss."""
     empty_id     = PIECE_ORDER.index('.')
@@ -51,7 +25,6 @@ def compute_piece_loss(probs, w):
     piece_penalty= (w * (16 - piece_counts).clamp(min=0)).mean()
 
     return piece_penalty
-
 
 def compute_mat_loss(probs, mat_sign, label, w, no_mat_ids_t,
                      white_mat_ids_t, black_mat_ids_t):
@@ -77,7 +50,6 @@ def compute_mat_loss(probs, mat_sign, label, w, no_mat_ids_t,
         mat_loss += (w[mask_black] * vioB).mean()
 
     return mat_loss
-
 
 def compute_cp_loss(logits, label, sample, B, device,
                     stockfish, engine_path,

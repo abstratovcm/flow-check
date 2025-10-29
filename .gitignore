@@ -1,3 +1,7 @@
+venv/
 *.pyc
 *.csv
 *.parquet
+*.pt
+*.png
+*.svg
