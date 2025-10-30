@@ -38,9 +38,10 @@ def main():
     )
     print(f"Training on: {device} ({torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'})")
 
-    engine_path = cfg["engine_path"]
-    stockfish = chess.engine.SimpleEngine.popen_uci(engine_path)
-    stockfish.configure({"Threads": 4, "UCI_LimitStrength": False, "Hash": 2048})
+    if cfg.get("use_cp_loss", True):
+        engine_path = cfg["engine_path"]
+        stockfish = chess.engine.SimpleEngine.popen_uci(engine_path)
+        stockfish.configure({"Threads": 4, "UCI_LimitStrength": False, "Hash": 2048})
 
     ds = ChessBoardDataset(
         cfg["parquet_path"],
