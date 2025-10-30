@@ -104,7 +104,12 @@ def main():
     lambda_max    = 0.1
 
     log_interval = cfg.get("log_interval", 100)
-    stats_csv = cfg.get("stats_csv_path", "training_stats_all_terms_corrected.csv")
+
+    ckpt_dir = cfg.get("checkpoint_dir", "checkpoints")
+    default_csv_path = os.path.join(ckpt_dir, "training_stats.csv")
+    stats_csv = cfg.get("stats_csv_path", default_csv_path)
+    os.makedirs(ckpt_dir, exist_ok=True)
+
     with open(stats_csv, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
@@ -298,8 +303,6 @@ def main():
 
         save_interval = cfg.get("save_interval", 1)
         if (epoch + 1) % save_interval == 0:
-            ckpt_dir = cfg.get("checkpoint_dir", "checkpoints")
-            os.makedirs(ckpt_dir, exist_ok=True)
             ckpt_path = os.path.join(ckpt_dir, f"model_epoch{epoch+1}.pt")
             torch.save({
                 "epoch": epoch + 1,
@@ -309,7 +312,8 @@ def main():
             }, ckpt_path)
             print(f" → checkpoint saved to {ckpt_path}")
 
-    stockfish.quit()
+    if cfg.get("use_cp_loss", True):
+        stockfish.quit()
 
 if __name__ == "__main__":
     main()

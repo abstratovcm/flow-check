@@ -6,10 +6,10 @@
   "null_label": 9,
   "eta": 0.1,
   "samples_per_label": 500,
-  "output_pt": "checkpoints/model_epoch10.pt",
+  "output_pt": "checkpoints/model_epoch40.pt",
   "guidance_scale": 3.0,
   "batch_size": 384,
-  "epochs": 10,
+  "epochs": 40,
   "labels": [
     "(M^0,E^0)",
     "(M^0,E^+)",
