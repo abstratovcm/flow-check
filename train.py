@@ -227,19 +227,20 @@ def main():
 
             optimizer.zero_grad()
             scaler.scale(loss).backward()
-            scaler.step(optimizer)
+            scaler.unscale_(optimizer)
             total_norm = 0.0
             for p in model.parameters():
                 if p.grad is not None:
                     total_norm += p.grad.detach().norm(2).item()**2
             grad_norm = total_norm**0.5
             grad_norms.append(grad_norm)
+            scaler.step(optimizer)
+            scaler.update()
             param_norm = 0.0
             for p in model.parameters():
                 param_norm += p.detach().norm(2).item()**2
             param_norm = param_norm**0.5
             param_norms.append(param_norm)
-            scaler.update()
             lr_scheduler.step()
 
             current_lr = lr_scheduler.get_last_lr()[0]
