@@ -20,6 +20,8 @@ from flow_matching.loss import MixturePathGeneralizedKL
 from tqdm import tqdm
 from data.chess_dataset import ChessBoardDataset, PIECE_ORDER
 from model.vt_discrete_flow import VisionTransformerDiscreteFlow as DiscreteFlow
+from utils.constants import PIECE_VALS
+from utils.chess_utils import EngineManager
 import losses
 import csv
 
@@ -29,11 +31,8 @@ import chess.engine
 def main():
     random.seed(cfg.get("seed", 0))
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    piece_vals = {'.':0, 'P':1,'N':3,'B':3,'R':5,'Q':9,
-                  'p':-1,'n':-3,'b':-3,'r':-5,'q':-9,
-                  'K':0,'k':0}
     mat_sign = torch.tensor(
-        [piece_vals[s] for s in PIECE_ORDER],
+        [PIECE_VALS[s] for s in PIECE_ORDER],
         device=device
     )
     print(f"Training on: {device} ({torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'})")
@@ -41,7 +40,12 @@ def main():
     if cfg.get("use_cp_loss", True):
         engine_path = cfg["engine_path"]
         stockfish = chess.engine.SimpleEngine.popen_uci(engine_path)
-        stockfish.configure({"Threads": 4, "UCI_LimitStrength": False, "Hash": 2048})
+        stockfish = EngineManager(
+            engine_path,
+            Threads=4,
+            UCI_LimitStrength=False,
+            Hash=2048
+        )
 
     ds = ChessBoardDataset(
         cfg["parquet_path"],
@@ -117,7 +121,7 @@ def main():
             "mean_loss","std_loss","mean_king_loss","std_king_loss",
             "mean_piece_loss","std_piece_loss","mean_mat_loss","std_mat_loss",
             "mean_cp_loss","std_cp_loss","lr","epoch_time_s",
-            "lambda_k","grad_norm","param_norm",
+            "lambda_k","grad_norm","param_norm","nan_batch_pct",
             "samples_per_sec","gpu_mem_gb"
         ])
 
@@ -129,6 +133,7 @@ def main():
         batch_cp_losses    = []
         grad_norms  = []
         param_norms = []
+        nan_batch_count = 0
         if   epoch <= warmup_epochs - 1:
             lambda_k = 0.0
         elif epoch <= warmup_epochs + ramp_epochs - 1:
@@ -212,8 +217,7 @@ def main():
 
             if cfg.get("use_cp_loss", True):
                 cp_pg_loss = losses.compute_cp_loss(
-                    logits, label, sample, B, device,
-                    stockfish, engine_path,
+                    logits, label, sample, B, device, stockfish,
                     cp_bal_ids_t, cp_white_ids_t, cp_black_ids_t
                 )
                 loss = loss + lambda_k * cp_pg_loss
@@ -228,11 +232,14 @@ def main():
             optimizer.zero_grad()
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             total_norm = 0.0
             for p in model.parameters():
                 if p.grad is not None:
                     total_norm += p.grad.detach().norm(2).item()**2
             grad_norm = total_norm**0.5
+            if np.isnan(grad_norm):
+                nan_batch_count += 1
             grad_norms.append(grad_norm)
             scaler.step(optimizer)
             scaler.update()
@@ -262,7 +269,8 @@ def main():
         mean_mat_loss = epoch_mat_loss / total_batches
         mean_cp_loss = epoch_cp_loss / total_batches
         epoch_time = time.time() - start_time
-        epoch_grad_norm = float(np.mean(grad_norms))
+        epoch_grad_norm = float(np.nanmean(grad_norms))
+        nan_batch_pct = (nan_batch_count / total_batches) * 100.0
         epoch_param_norm= float(np.mean(param_norms))
         samples_per_sec = (len(dl) * cfg["batch_size"]) / epoch_time
         gpu_mem_gb = (torch.cuda.max_memory_allocated(device) / 1e9) if torch.cuda.is_available() else 0.0
@@ -294,6 +302,7 @@ def main():
             "lambda_k":        lambda_k,
             "grad_norm":       epoch_grad_norm,
             "param_norm":      epoch_param_norm,
+            "nan_batch_pct":   nan_batch_pct,
             "samples_per_sec": samples_per_sec,
             "gpu_mem_gb":      gpu_mem_gb,
         }

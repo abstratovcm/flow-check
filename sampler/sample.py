@@ -183,6 +183,10 @@ def main():
     guidance_scales = [1.0, 1.5, 2.0]
     base = os.path.splitext(os.path.basename(cfg["output_pt"]))[0]
 
+    ckpt_dir = cfg.get("checkpoint_dir", "checkpoints")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    out_fname = os.path.join(ckpt_dir, f"{base}_sampled_positions.csv")
+
     fieldnames = [
         "guidance_scale", "conditioning_label", "fen4", "initial_x0",
         *INVALID_FLAGS.values(), *TARGET_FLAGS.values(),
@@ -195,9 +199,6 @@ def main():
         "corrected_material_advantage",
         "corrected_white_piece_count", "corrected_black_piece_count"
     ]
-
-    out_fname = f"{base}_positions_all_terms_corrected.csv"
-    print(f"Starting sampling. Output will be saved to {out_fname}")
 
     with open(out_fname, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)

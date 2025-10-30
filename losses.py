@@ -4,7 +4,7 @@ import chess
 import chess.engine
 from torch.distributions import Categorical
 from data.chess_dataset import PIECE_ORDER
-from utils.chess_utils import tensor_to_fen
+from utils.chess_utils import tensor_to_fen, EngineManager
 
 def compute_king_loss(probs, w):
     """Calculates the king penalty loss."""
@@ -52,7 +52,7 @@ def compute_mat_loss(probs, mat_sign, label, w, no_mat_ids_t,
     return mat_loss
 
 def compute_cp_loss(logits, label, sample, B, device,
-                    stockfish, engine_path,
+                    stockfish: EngineManager,
                     cp_bal_ids_t, cp_white_ids_t, cp_black_ids_t):
     """Calculates the centipawn policy gradient loss."""
     K = 1
@@ -103,17 +103,10 @@ def compute_cp_loss(logits, label, sample, B, device,
                         raw = info["score"].pov(chess.WHITE).score(mate_score=10000)
                         raw = max(-2000, min(2000, raw))
                         cp_vals[i] = raw / 100.0
-                    except chess.engine.EngineTerminatedError:
-                        stockfish = chess.engine.SimpleEngine.popen_uci(engine_path)
-                        stockfish.configure({"Threads": 4, "UCI_LimitStrength": False, "Hash": 2048})
-                        try:
-                            info = stockfish.analyse(board, chess.engine.Limit(depth=10))
-                            raw = info["score"].pov(chess.WHITE).score(mate_score=10000)
-                            raw = max(-2000, min(2000, raw))
-                            cp_vals[i] = raw / 100.0
-                        except chess.engine.EngineTerminatedError:
-                            cp_vals[i] = 0.0
-                            status_penalties[i] = 10.0
+                    except Exception as e:
+                        print(f"WARNING: Stockfish analysis failed: {e}")
+                        cp_vals[i] = 0.0
+                        status_penalties[i] = 10.0
 
         else:
             cp_vals          = torch.zeros(B, device=device)
